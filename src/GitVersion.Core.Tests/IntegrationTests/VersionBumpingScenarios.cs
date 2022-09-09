@@ -1,9 +1,11 @@
 using GitTools.Testing;
 using GitVersion.Core.Tests.Helpers;
 using GitVersion.Model.Configuration;
+using GitVersion.OutputVariables;
 using GitVersion.VersionCalculation;
 using LibGit2Sharp;
 using NUnit.Framework;
+using Shouldly;
 
 namespace GitVersion.Core.Tests.IntegrationTests;
 
@@ -11,21 +13,65 @@ namespace GitVersion.Core.Tests.IntegrationTests;
 public class VersionBumpingScenarios : TestBase
 {
     [Test]
-    public void AppliedPrereleaseTagCausesBump()
+    public void AppliedPrereleaseTagCausesBump1()
     {
         var configuration = new Config
         {
-            Branches =
-            {
-                {
-                    MainBranch, new BranchConfig
-                    {
-                        Tag = "pre",
-                        SourceBranches = new HashSet<string>()
-                    }
-                }
-            }
+            // NextVersion = "1.0"
         };
+
+        using var fixture = new EmptyRepositoryFixture();
+        fixture.Repository.MakeACommit();
+        Commands.Checkout(fixture.Repository, fixture.Repository.CreateBranch("develop"));
+        fixture.Repository.MakeACommit();
+        fixture.Repository.MakeACommit();
+
+        // ReSharper disable once UnusedVariable
+        var previousVersion = GetSemVer(fixture.GetVersion(configuration));
+
+        fixture.Repository.MakeACommit();
+
+        var currentVersion = GetSemVer(fixture.GetVersion(configuration));
+
+        currentVersion.ShouldBeGreaterThan(previousVersion);
+
+        Commands.Checkout(fixture.Repository, fixture.Repository.CreateBranch("release/1.0.0"));
+
+        fixture.GetVersion(configuration).SemVer.ShouldBe("1.0.0-beta.1");
+
+        fixture.Repository.MakeACommit();
+
+        fixture.GetVersion(configuration).SemVer.ShouldBe("1.0.0-beta.1");
+
+        Commands.Checkout(fixture.Repository, fixture.Repository.Branches["develop"]);
+
+        previousVersion = currentVersion;
+        currentVersion = GetSemVer(fixture.GetVersion(configuration));
+
+        currentVersion.ShouldBe(previousVersion);
+
+        fixture.Repository.MakeACommit();
+        fixture.Repository.MakeACommit();
+
+        previousVersion = currentVersion;
+        currentVersion = GetSemVer(fixture.GetVersion(configuration));
+
+        currentVersion.ShouldBeGreaterThan(previousVersion);
+
+        Commands.
+            Checkout(fixture.Repository, fixture.Repository.Branches["release/1.0.0"]);
+
+        fixture.Repository.ApplyTag("1.0.0-beta.1");
+
+
+
+        static SemanticVersion GetSemVer(VersionVariables ver) => SemanticVersion.Parse(ver.FullSemVer, null);
+    }
+
+    [Test]
+    public void AppliedPrereleaseTagCausesBump()
+    {
+        var configuration = new Config {Branches = {{MainBranch, new BranchConfig {Tag = "pre", SourceBranches = new HashSet<string>()}}}};
         using var fixture = new EmptyRepositoryFixture();
         fixture.Repository.MakeACommit();
         fixture.Repository.MakeATaggedCommit("1.0.0-pre.1");
